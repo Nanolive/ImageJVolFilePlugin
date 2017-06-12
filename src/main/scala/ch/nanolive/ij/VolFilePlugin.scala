@@ -1,6 +1,7 @@
-package ij
+package ch.nanolive.ij
 
 import ch.nanolive.acquisition.models.Acquisition
+import ij.ImagePlus
 import ij.plugin.PlugIn
 
 /**
