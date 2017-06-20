@@ -12,6 +12,7 @@ lazy val root = (project in file(".")).
 
 libraryDependencies ++= Seq(
   "net.imagej" % "ij" % "1.51n",
+  //"ome" % "bioformats_package" % "5.5.2",
   "ch.nanolive" %% "javavolfileapi" % "1.0.0" withSources()
 )
 
@@ -19,6 +20,7 @@ libraryDependencies ++= Seq(
 resolvers  ++= Seq(
   "Nanolive Repository" at "https://artifactory.nanolive.ch/artifactory/sbt-release/",
   "imagej.public" at "http://maven.imagej.net/content/groups/public",
+  "Open microscopy" at "http://artifacts.openmicroscopy.org/artifactory/ome.releases",
   "Typesafe Repo" at "http://repo.typesafe.com/typesafe/releases/"
 )
 
