@@ -35,7 +35,7 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
   val height: Int = _firstSlice.getHeight
   override def getSize: Int = framesWithVolumes.size * slicesPerFrame
   val minMax: (Double, Double) = {
-    val pixelData = _decoder.decodeAsRaster(0).getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
+    val pixelData = _firstSlice.getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
 
     val max = pixelData.max
 

@@ -7,7 +7,7 @@ import java.util.concurrent.{ExecutorService, Executors}
 import ch.nanolive.acquisition.models.{AcquiredFile, Acquisition, Frame}
 import ch.nanolive.acquisition.services.io.AcquisitionZip
 import ij.plugin.PlugIn
-import ij.{IJ, ImagePlus}
+import ij.{IJ, ImagePlus, VirtualStack}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -24,59 +24,60 @@ class VolFilePlugin extends PlugIn {
   }
 
   override def run(arg: String): Unit = {
-    val fileDialog = new FileDialog(null.asInstanceOf[AwtFrame])
-    fileDialog.setModal(true)
-    fileDialog.show()
-    if (fileDialog.getFile == null)
-      return
 
-    val fileName = fileDialog.getDirectory + fileDialog.getFile
+    val fileName =
+      if (arg != null && !arg.isEmpty) {
+        arg
+      } else {
+        val fileDialog = new FileDialog(null.asInstanceOf[AwtFrame])
+        fileDialog.setModal(true)
+        fileDialog.show()
+        if (fileDialog.getFile == null)
+          return
 
-    IJ.showStatus("Reading Metadata")
+        fileDialog.getDirectory + fileDialog.getFile
+      }
 
     val volFile = new AcquisitionZip(new File(fileName))
     val acquisitionF = volFile.getAcquisition
-    val framesF = acquisitionF
-      .flatMap((acq: Acquisition) => {
-        Future.sequence(
-          acq
-            .frames
-            .map(volFile.getFrame)
-        )
-      })
+    val framesF = acquisitionF.flatMap(
+      (acq: Acquisition) => Future.sequence(
+        acq
+          .frames
+          .map(volFile.getFrame)
+      ))
 
     // display RI Vol
     framesF
       .map(_.filter(_.volume.isDefined))
-      .map(lf => {
-        IJ.showStatus("Opening image")
-        val imageStack = new VolFileImageStack(volFile, lf)
-        val image = new ImagePlus("RI: " + fileDialog.getFile, imageStack)
-        image.setOpenAsHyperStack(true)
-        image.setDimensions(1, imageStack.slicesPerFrame, lf.size)
-        IJ.showStatus("Ready")
-        image.show()
+      .map(frames => {
+        try {
+          val imageStack = new VolFileImageStack(volFile, frames)
+          val image = new ImagePlus("RI: " + fileName, imageStack)
+          image.setOpenAsHyperStack(true)
+          image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
+          image.show()
+        } catch {
+          case e =>
+            e.printStackTrace()
+        }
       })
       .onFailure({
         case e =>
           e.printStackTrace()
-          IJ.showMessage(e.getMessage)
-          IJ.showStatus(e.getMessage)
       })
 
     // display fluo images
     acquisitionF.map(
       _.fluoChannels.foreach(channel => {
         framesF
-          .map((frames: List[Frame]) => frames.filter(_.fluoImage(channel).isDefined))
+          .map(_.filter(_.fluoImage(channel).isDefined))
           .map(frames => {
             if (frames.nonEmpty) {
-              IJ.showStatus("Opening image")
               val imageStack = new VolFileFluoStack(volFile, channel, frames)
-              val image = new ImagePlus(channel + ": " + fileDialog.getFile, imageStack)
+              val image = new ImagePlus(channel + ": " + fileName, imageStack)
               image.setOpenAsHyperStack(true)
               image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
-              IJ.showStatus("Ready")
               image.show()
             }
           })
