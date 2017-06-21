@@ -24,19 +24,14 @@ resolvers  ++= Seq(
 )
 
 val ignoredJars = Set(
-  "ij-1.51n",
-  "scala-library-" + scalaVersion,
-  "scala-reflect-" + scalaVersion
+  "ij-1.51n.jar",
+  "scala-library-2.12.2.jar",
+  "scala-reflect-2.12.2.jar"
 )
 
 assemblyExcludedJars in assembly := {
   val cp = (fullClasspath in assembly).value
-  cp filter {jar => ignoredJars.contains(jar.data.getName + ".jar")}
+  cp filter {jar => ignoredJars.contains(jar.data.getName)}
 }
-
-assemblyShadeRules in assembly := Seq(
-  ShadeRule.rename("scala.**" -> "nlshaded.scala.@1").inAll
-)
-
 
 assemblyJarName := "Nanolive_Volfile_Reader.jar"
