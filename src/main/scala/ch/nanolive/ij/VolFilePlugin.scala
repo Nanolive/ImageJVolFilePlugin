@@ -45,7 +45,6 @@ class VolFilePlugin extends PlugIn {
     volFile
       .getAcquisition
       .flatMap((acq: Acquisition) => {
-        val ip = IJ.createHyperStack(fileDialog.getFile, 512, 512, 1, 96, acq.frames.size, 16)
         Future.sequence(
           acq
             .frames
@@ -55,10 +54,10 @@ class VolFilePlugin extends PlugIn {
       .map(_.filter(_.volume.isDefined))
       .map(lf => {
         val imageStack = new VolFileImageStack(volFile, lf)
-        val hyperStackImg = IJ.createHyperStack("", 512, 512, 1, 96, lf.size, 32)
-        hyperStackImg.setStack(imageStack)
-        hyperStackImg.setTitle(fileDialog.getFile)
-        hyperStackImg.show()
+        val image = new ImagePlus(fileDialog.getFile, imageStack)
+        image.setOpenAsHyperStack(true)
+        image.setDimensions(1, 96, lf.size)
+        image.show()
       })
       .onFailure({
         case e =>
