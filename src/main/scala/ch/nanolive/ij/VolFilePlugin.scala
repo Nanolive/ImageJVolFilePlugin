@@ -21,10 +21,10 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Created by Paul on 24/05/2017.
   */
-class VolFilePlugin extends ImagePlus with PlugIn {
+class VolFilePlugin extends PlugIn {
 
   implicit val ec: ExecutionContext = new ExecutionContext() {
-    private val threadPool: ExecutorService = Executors.newSingleThreadExecutor
+    private val threadPool: ExecutorService = Executors.newCachedThreadPool()
     override def execute(runnable: Runnable) { threadPool.submit(runnable) }
     override def reportFailure(cause: Throwable) { cause.printStackTrace() }
     override def prepare: ExecutionContext = this
@@ -39,41 +39,32 @@ class VolFilePlugin extends ImagePlus with PlugIn {
 
     val fileName = fileDialog.getDirectory + fileDialog.getFile
 
+
     val volFile = new AcquisitionZip(new File(fileName))
+
     volFile
       .getAcquisition
       .flatMap((acq: Acquisition) => {
+        val ip = IJ.createHyperStack(fileDialog.getFile, 512, 512, 1, 96, acq.frames.size, 16)
         Future.sequence(
           acq
             .frames
             .map(volFile.getFrame)
         )
       })
-      .flatMap((lf: List[Frame]) => {
-        Future.sequence(
-          lf
-            .filter(_.volume.isDefined)
-            .map(f => {
-              volFile.getFile(f.pathInZip(f.volume.get)).zip(Future.successful(f))
-            })
-          )
-      })
-      .map((lf: List[(File, Frame)]) => {
-        lf.foreach(f => {
-          val decoder = new TiffDecoder(new FileInputStream(f._1), f._1.getName)
-          val ip = new Opener().openTiffStack(decoder.getTiffInfo)
-          ip.setTitle("Frame at t=" + f._2.time + "ms")
-          ip.show()
-        })
-
+      .map(_.filter(_.volume.isDefined))
+      .map(lf => {
+        val imageStack = new VolFileImageStack(volFile, lf)
+        val hyperStackImg = IJ.createHyperStack("", 512, 512, 1, 96, lf.size, 32)
+        hyperStackImg.setStack(imageStack)
+        hyperStackImg.setTitle(fileDialog.getFile)
+        hyperStackImg.show()
       })
       .onFailure({
         case e =>
           e.printStackTrace()
+          IJ.showMessage(e.getMessage)
+          IJ.showStatus(e.getMessage)
       })
   }
-
-  override def getImage: Image = super.getImage
-
-  override def getImageStack: ImageStack = super.getImageStack
 }
