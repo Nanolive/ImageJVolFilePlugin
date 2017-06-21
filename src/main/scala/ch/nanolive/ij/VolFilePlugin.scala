@@ -1,20 +1,13 @@
 package ch.nanolive.ij
 
-import java.awt.{FileDialog, Image, Frame => AwtFrame}
-import java.io.{File, FileInputStream, IOException}
+import java.awt.{FileDialog, Frame => AwtFrame}
+import java.io.File
 import java.util.concurrent.{ExecutorService, Executors}
-import java.util.zip.ZipFile
 
-import ch.nanolive.acquisition.models.{Acquisition, Frame}
-import ch.nanolive.acquisition.models.metas.MetaData
+import ch.nanolive.acquisition.models.{AcquiredFile, Acquisition, Frame}
 import ch.nanolive.acquisition.services.io.AcquisitionZip
-import ij.gui.StackWindow
-import ij.io.{FileInfo, Opener, TiffDecoder}
-import ij.{IJ, ImagePlus, ImageStack, VirtualStack}
 import ij.plugin.PlugIn
-
-//import loci.formats.IFormatReader
-//import loci.plugins.util.{BFVirtualStack, ImageProcessorReader, VirtualImagePlus, VirtualReader}
+import ij.{IJ, ImagePlus}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -39,11 +32,11 @@ class VolFilePlugin extends PlugIn {
 
     val fileName = fileDialog.getDirectory + fileDialog.getFile
 
+    IJ.showStatus("Reading Metadata")
 
     val volFile = new AcquisitionZip(new File(fileName))
-
-    volFile
-      .getAcquisition
+    val acquisitionF = volFile.getAcquisition
+    val framesF = acquisitionF
       .flatMap((acq: Acquisition) => {
         Future.sequence(
           acq
@@ -51,12 +44,17 @@ class VolFilePlugin extends PlugIn {
             .map(volFile.getFrame)
         )
       })
+
+    // display RI Vol
+    framesF
       .map(_.filter(_.volume.isDefined))
       .map(lf => {
+        IJ.showStatus("Opening image")
         val imageStack = new VolFileImageStack(volFile, lf)
-        val image = new ImagePlus(fileDialog.getFile, imageStack)
+        val image = new ImagePlus("RI: " + fileDialog.getFile, imageStack)
         image.setOpenAsHyperStack(true)
-        image.setDimensions(1, 96, lf.size)
+        image.setDimensions(1, imageStack.slicesPerFrame, lf.size)
+        IJ.showStatus("Ready")
         image.show()
       })
       .onFailure({
@@ -65,5 +63,25 @@ class VolFilePlugin extends PlugIn {
           IJ.showMessage(e.getMessage)
           IJ.showStatus(e.getMessage)
       })
+
+    // display fluo images
+    acquisitionF.map(
+      _.fluoChannels.foreach(channel => {
+        framesF
+          .map((frames: List[Frame]) => frames.filter(_.fluoImage(channel).isDefined))
+          .map(frames => {
+            if (frames.nonEmpty) {
+              IJ.showStatus("Opening image")
+              val imageStack = new VolFileFluoStack(volFile, channel, frames)
+              val image = new ImagePlus(channel + ": " + fileDialog.getFile, imageStack)
+              image.setOpenAsHyperStack(true)
+              image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
+              IJ.showStatus("Ready")
+              image.show()
+            }
+          })
+
+      })
+    )
   }
 }

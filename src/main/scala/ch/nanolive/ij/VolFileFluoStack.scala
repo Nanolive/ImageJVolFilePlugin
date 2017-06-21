@@ -15,12 +15,12 @@ import scala.concurrent.duration._
 /**
   * Created by Paul on 20/06/2017.
   */
-class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[Frame]) extends VirtualStack {
+class VolFileFluoStack(acquisitionZip: AcquisitionZip, channel: String, framesWithChannel: List[Frame]) extends VirtualStack {
 
   // Constructor
-  private val _frame = framesWithVolumes.head
+  private val _frame = framesWithChannel.head
   private val _file:File = Await.ready(
-    acquisitionZip.getFile(_frame.pathInZip(_frame.volume.get)),
+    acquisitionZip.getFile(_frame.pathInZip(_frame.fluoImage(channel).get)),
     5 second
   ).value.get.get
   private val _decoder = ImageCodec.createImageDecoder("tiff", _file, null)
@@ -30,10 +30,10 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
 
   // image stack data
   setBitDepth(32)
-  val slicesPerFrame: Int = _decoder.getNumPages
+  val slicesPerFrame: Int = 1
   val width: Int = _firstSlice.getWidth
   val height: Int = _firstSlice.getHeight
-  override def getSize: Int = framesWithVolumes.size * slicesPerFrame
+  override def getSize: Int = framesWithChannel.size * slicesPerFrame
   val minMax: (Double, Double) = {
     val pixelData = _decoder.decodeAsRaster(0).getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
 
@@ -57,10 +57,10 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
     val decoder = fileCache.getOrElse(
       frameNo,
       {
-        val frame = framesWithVolumes(frameNo)
+        val frame = framesWithChannel(frameNo)
 
         val file:File = Await.ready(
-          acquisitionZip.getFile(frame.pathInZip(frame.volume.get)),
+          acquisitionZip.getFile(frame.pathInZip(frame.fluoImage(channel).get)),
           1 second
         ).value.get.get
         ImageCodec.createImageDecoder("tiff", file, null)
