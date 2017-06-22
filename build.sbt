@@ -13,7 +13,7 @@ lazy val root = (project in file(".")).
 libraryDependencies ++= Seq(
   "net.imagej" % "ij" % "1.51n",
   "javax.media" % "jai_codec" % "1.1.3",
-  "ch.nanolive" %% "javavolfileapi" % "1.0.16" withSources()
+  "ch.nanolive" %% "javavolfileapi" % "1.0.17" withSources()
 )
 
 

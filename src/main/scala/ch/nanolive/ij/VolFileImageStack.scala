@@ -4,7 +4,8 @@ import java.io.File
 
 import ch.nanolive.acquisition.models.Frame
 import ch.nanolive.acquisition.services.io.AcquisitionZip
-import com.sun.media.jai.codec.{ImageCodec, ImageDecoder}
+import com.sun.media.jai.codec._
+import com.sun.media.jai.codecimpl.TIFFImageDecoder
 import ij.VirtualStack
 import ij.process.{FloatProcessor, ImageProcessor}
 
@@ -24,9 +25,10 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
     5 second
   ).value.get.get
   private val _decoder = ImageCodec.createImageDecoder("tiff", _file, null)
-  private val _firstSlice = _decoder.decodeAsRaster(0)
-  private val fileCache: mutable.WeakHashMap[Int, ImageDecoder] = new mutable.WeakHashMap[Int, ImageDecoder]
-  fileCache += ((0, _decoder))
+  private val _firstSlice = _decoder.decodeAsRenderedImage(0)
+  private val fileCache: mutable.HashMap[Int, (File, SeekableStream)] = new mutable.HashMap[Int, (File, SeekableStream)]()
+  private val decoderCache: mutable.WeakHashMap[Int, ImageDecoder] = new mutable.WeakHashMap[Int, ImageDecoder]
+  fileCache += ((0, (_file, new FileSeekableStream(_file))))
 
   // image stack data
   setBitDepth(32)
@@ -35,7 +37,7 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
   val height: Int = _firstSlice.getHeight
   override def getSize: Int = framesWithVolumes.size * slicesPerFrame
   val minMax: (Double, Double) = {
-    val pixelData = _firstSlice.getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
+    val pixelData = _firstSlice.getData.getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
 
     val max = pixelData.max
 
@@ -48,28 +50,62 @@ class VolFileImageStack(acquisitionZip: AcquisitionZip, framesWithVolumes: List[
     else
       (0, max)  // dunno??
   }
+  val minMaxRi: Array[Float] = _firstSlice.getProperty("tiff_directory").asInstanceOf[TIFFDirectory].getField(65000).getAsFloats
+  val scale: Double = (minMaxRi(1) - minMaxRi(0)) / (minMax._2 - minMax._1)
+
+  def getFile(frame: Frame): SeekableStream = fileCache.getOrElseUpdate(
+    frame.time,
+    {
+      val file = Await.ready(
+        acquisitionZip.getFile(frame.pathInZip(frame.volume.get)),
+        5 seconds
+      ).value.get.get
+      (file, new FileSeekableStream(file))
+    }
+  )._2
 
   override def getProcessor(n: Int): ImageProcessor = {
 
     val frameNo = (n-1) / slicesPerFrame
     val sliceNo = (n-1) % slicesPerFrame
 
-    val decoder = fileCache.getOrElse(
-      frameNo,
-      {
-        val frame = framesWithVolumes(frameNo)
+    val decoder = decoderCache
+      .getOrElse(
+        frameNo,
+        new TIFFImageDecoder(getFile(framesWithVolumes(frameNo)), null)
+      )
 
-        val file:File = Await.ready(
-          acquisitionZip.getFile(frame.pathInZip(frame.volume.get)),
-          1 second
-        ).value.get.get
-        ImageCodec.createImageDecoder("tiff", file, null)
-      }
-    )
-    val pixelData = decoder.decodeAsRaster(sliceNo).getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]])
+    val image = decoder.decodeAsRenderedImage(sliceNo)
+
+    val pixelData = image.getData.getPixels(0, 0, width, height, null.asInstanceOf[Array[Float]]).map(v => minMaxRi(0) + v * scale)
+
     val processor = new FloatProcessor(width, height, pixelData)
-    processor.setMinAndMax(minMax._1, minMax._2)
+    processor.setMinAndMax(minMaxRi(0), minMaxRi(1))
     processor.flipVertical()
     processor
+  }
+
+  val shutdownHook = new Thread {
+    override def run(): Unit = {
+      fileCache.foreach(fai => {
+        fai._2._2.close()
+      })
+      fileCache.foreach(fai => {
+        println(fai._2._1.getName + ": " + fai._2._1.delete())
+      })
+    }
+  }
+
+  Runtime.getRuntime.addShutdownHook(shutdownHook)
+
+  override def finalize(): Unit = {
+    fileCache.foreach(fai => {
+      fai._2._2.close()
+    })
+    fileCache.foreach(fai => {
+      println(fai._2._1.getName + ": " + fai._2._1.delete())
+    })
+    Runtime.getRuntime.removeShutdownHook(shutdownHook)
+    super.finalize()
   }
 }

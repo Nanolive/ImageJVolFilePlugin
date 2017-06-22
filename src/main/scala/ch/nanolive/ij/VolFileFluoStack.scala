@@ -23,6 +23,7 @@ class VolFileFluoStack(acquisitionZip: AcquisitionZip, channel: String, framesWi
     acquisitionZip.getFile(_frame.pathInZip(_frame.fluoImage(channel).get)),
     5 second
   ).value.get.get
+  _file.deleteOnExit()
   private val _decoder = ImageCodec.createImageDecoder("tiff", _file, null)
   private val _firstSlice = _decoder.decodeAsRaster(0)
   private val fileCache: mutable.WeakHashMap[Int, ImageDecoder] = new mutable.WeakHashMap[Int, ImageDecoder]
@@ -63,6 +64,7 @@ class VolFileFluoStack(acquisitionZip: AcquisitionZip, channel: String, framesWi
           acquisitionZip.getFile(frame.pathInZip(frame.fluoImage(channel).get)),
           1 second
         ).value.get.get
+        file.deleteOnExit()
         ImageCodec.createImageDecoder("tiff", file, null)
       }
     )

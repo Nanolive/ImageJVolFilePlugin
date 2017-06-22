@@ -51,21 +51,14 @@ class VolFilePlugin extends PlugIn {
     framesF
       .map(_.filter(_.volume.isDefined))
       .map(frames => {
-        try {
-          val imageStack = new VolFileImageStack(volFile, frames)
-          val image = new ImagePlus("RI: " + fileName, imageStack)
-          image.setOpenAsHyperStack(true)
-          image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
-          image.show()
-        } catch {
-          case e =>
-            e.printStackTrace()
-        }
+        val imageStack = new VolFileImageStack(volFile, frames)
+        val image = new ImagePlus("RI: " + fileName, imageStack)
+        image.setOpenAsHyperStack(true)
+        image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
+        image.show()
       })
-      .onFailure({
-        case e =>
-          e.printStackTrace()
-      })
+      .failed
+      .foreach(_.printStackTrace())
 
     // display fluo images
     acquisitionF.map(
@@ -79,6 +72,7 @@ class VolFilePlugin extends PlugIn {
               image.setOpenAsHyperStack(true)
               image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
               image.show()
+              image.close()
             }
           })
 
