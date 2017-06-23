@@ -72,7 +72,6 @@ class VolFilePlugin extends PlugIn {
               image.setOpenAsHyperStack(true)
               image.setDimensions(1, imageStack.slicesPerFrame, frames.size)
               image.show()
-              image.close()
             }
           })
 
